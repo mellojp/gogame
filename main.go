@@ -3,7 +3,6 @@ package main
 import (
 	"image"
 	"log"
-	"math"
 	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -21,9 +20,8 @@ const (
 	PLAYER_SPEED = 4
 
 	IDLE_ANIM_TPS = 6.0
-	RUN_ANIM_TPS  = 5.0
-	TURN_ANIM_TPS = 1.4
-	STOP_ANIM_TPS = 2.0
+	RUN_ANIM_TPS  = 3.0
+	STOP_ANIM_TPS = 0.5
 )
 
 type Game struct {
@@ -39,41 +37,23 @@ func (g *Game) Update() error {
 
 	inputX, inputY := 0, 0
 
-	if !g.Player.isAnimationLocked {
-		//move player
-		if ebiten.IsKeyPressed(ebiten.KeyRight) || ebiten.IsKeyPressed(ebiten.KeyD) {
-			inputX += 1
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
-			inputX -= 1
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyUp) || ebiten.IsKeyPressed(ebiten.KeyW) {
-			inputY -= 1
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyDown) || ebiten.IsKeyPressed(ebiten.KeyS) {
-			inputY += 1
-		}
-	} else {
-		// If locked (turning), maintain movement in the current direction
-		v := DirToVector[g.Player.CurrDirection]
-		inputX, inputY = v.X, v.Y
+	//move player
+	if ebiten.IsKeyPressed(ebiten.KeyRight) || ebiten.IsKeyPressed(ebiten.KeyD) {
+		inputX += 1
 	}
-
-	size := math.Sqrt(math.Pow(float64(inputX), 2) + math.Pow(float64(inputY), 2))
-	if size > 0 {
-		speed := float64(PLAYER_SPEED)
-		if g.Player.isAnimationLocked {
-			speed *= 0.1 // Redução de velocidade para o efeito de deslize
-		}
-		g.Player.Dx = (float64(inputX) / size) * speed
-		g.Player.Dy = (float64(inputY) / size) * speed
+	if ebiten.IsKeyPressed(ebiten.KeyLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
+		inputX -= 1
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyUp) || ebiten.IsKeyPressed(ebiten.KeyW) {
+		inputY -= 1
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyDown) || ebiten.IsKeyPressed(ebiten.KeyS) {
+		inputY += 1
 	}
 
 	g.Player.SetDirection(inputX, inputY)
 	g.Player.SetMode(inputX, inputY)
-
-	g.Player.Xpos += g.Player.Dx
-	g.Player.Ypos += g.Player.Dy
+	g.Player.Move(inputX, inputY)
 
 	animFinished := g.Player.CurrentAnimation().Update()
 
@@ -88,7 +68,7 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	//set player position
 	opts := ebiten.DrawImageOptions{}
-	opts.GeoM.Scale(3, 3)
+	opts.GeoM.Scale(5, 5)
 	opts.GeoM.Translate(g.Player.Xpos, g.Player.Ypos)
 
 	//loop over the tilemap layers
@@ -154,19 +134,15 @@ func main() {
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeDisabled)
 
 	//player imgs loading
-	idleImg, _, err := ebitenutil.NewImageFromFile("assets/player/Idle.png")
+	idleImg, _, err := ebitenutil.NewImageFromFile("assets/player/Shadowless/Idle2_Shadowless.png")
 	if err != nil {
 		log.Fatal(err)
 	}
-	runImg, _, err := ebitenutil.NewImageFromFile("assets/player/Run.png")
+	runImg, _, err := ebitenutil.NewImageFromFile("assets/player/Shadowless/Run_Shadowless.png")
 	if err != nil {
 		log.Fatal(err)
 	}
-	turnImg, _, err := ebitenutil.NewImageFromFile("assets/player/180Turn.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-	stopImg, _, err := ebitenutil.NewImageFromFile("assets/player/Stop.png")
+	stopImg, _, err := ebitenutil.NewImageFromFile("assets/player/Shadowless/Stop_Shadowless.png")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -183,14 +159,12 @@ func main() {
 	playerSprisheets := map[PlayerMode]*Spritesheet{
 		Idle: NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, idleImg),
 		Run:  NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, runImg),
-		Turn: NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, turnImg),
 		Stop: NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, stopImg),
 	}
 
 	playerAnimations := map[PlayerMode]map[PlayerDir]*Animation{
 		Idle: newDirectionalAnimations(IDLE_ANIM_TPS, true),
 		Run:  newDirectionalAnimations(RUN_ANIM_TPS, true),
-		Turn: newDirectionalAnimations(TURN_ANIM_TPS, false),
 		Stop: newDirectionalAnimations(STOP_ANIM_TPS, false),
 	}
 

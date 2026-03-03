@@ -5,7 +5,6 @@ type PlayerMode uint8
 const (
 	Idle PlayerMode = iota
 	Run
-	Turn
 	Stop
 )
 
@@ -14,8 +13,6 @@ type Player struct {
 	Dx, Dy            float64
 	Animations        map[PlayerMode]map[PlayerDir]*Animation
 	CurrDirection     PlayerDir
-	turnTargetDir     PlayerDir
-	hasTurnTarget     bool
 	Modes             map[PlayerMode]*Spritesheet
 	CurrMode          PlayerMode
 	isAnimationLocked bool
@@ -30,6 +27,27 @@ func NewPlayer(x, y float64, animations map[PlayerMode]map[PlayerDir]*Animation,
 		Modes:         modes,
 		CurrMode:      Idle,
 	}
+}
+
+func (p *Player) Move(x, y int) {
+	size := 0.0
+	if x != 0 && y != 0 {
+		size = 1.4142 // Movimento diagonal constante
+	} else if x != 0 || y != 0 {
+		size = 1.0 // Movimento reto
+	}
+
+	if size > 0 {
+		speed := float64(PLAYER_SPEED)
+		if p.isAnimationLocked {
+			speed *= 0.3
+		}
+		p.Dx = (float64(x) / size) * speed
+		p.Dy = (float64(y) / size) * speed
+	}
+
+	p.Xpos += p.Dx
+	p.Ypos += p.Dy
 }
 
 func (p *Player) SetDirection(x, y int) {
@@ -51,13 +69,12 @@ func (p *Player) SetDirection(x, y int) {
 		return
 	}
 
-	current := DirToVector[p.CurrDirection]
-	if current.X == -x && current.Y == -y {
-		p.turnTargetDir = dir
-		p.hasTurnTarget = true
-		p.TriggerAction(Turn)
-		return
-	}
+	// APAGUE ESTE BLOCO QUE EXISTIA AQUI:
+	// current := DirToVector[p.CurrDirection]
+	// if current.X == -x && current.Y == -y {
+	// 	p.TriggerAction(Turn)
+	// 	return
+	// }
 
 	if p.CurrDirection == dir {
 		return
@@ -77,11 +94,6 @@ func (p *Player) SetMode(x, y int) {
 		next = Run
 	}
 
-	if p.CurrMode == Run && next == Idle {
-		p.TriggerAction(Stop)
-		return
-	}
-
 	if next != p.CurrMode {
 		p.CurrMode = next
 		p.Animations[p.CurrMode][p.CurrDirection].Reset()
@@ -90,21 +102,24 @@ func (p *Player) SetMode(x, y int) {
 
 func (p *Player) TriggerAction(m PlayerMode) {
 	if !p.isAnimationLocked {
-		p.isAnimationLocked = true
-		p.Animations[m][p.CurrDirection].Reset()
-		p.CurrMode = m
+		if _, ok := p.Animations[m]; ok { // Verifica se o modo existe
+			p.isAnimationLocked = true
+			p.Animations[m][p.CurrDirection].Reset()
+			p.CurrMode = m
+		}
 	}
 }
 
 func (p *Player) CurrentAnimation() *Animation {
-	return p.Animations[p.CurrMode][p.CurrDirection]
-}
-
-func (p *Player) FinishAction() {
-	if p.CurrMode == Turn && p.hasTurnTarget {
-		p.CurrDirection = p.turnTargetDir
-		p.hasTurnTarget = false
+	if anims, ok := p.Animations[p.CurrMode]; ok {
+		if anim, ok := anims[p.CurrDirection]; ok {
+			return anim
+		}
 	}
+	// Retorna animação padrão (Idle) se der problema, evitando crash
+	return p.Animations[Idle][p.CurrDirection]
+}
+func (p *Player) FinishAction() {
 
 	p.CurrMode = Idle
 	p.Animations[p.CurrMode][p.CurrDirection].Reset()
