@@ -12,8 +12,9 @@ type TileJSON struct {
 }
 
 type LayerJSON struct {
-	Name  string      `json:"name"`
-	Tiles []*TileJSON `json:"tiles"`
+	Name     string      `json:"name"`
+	Tiles    []*TileJSON `json:"tiles"`
+	Collider bool        `json:"collider"`
 }
 
 type TilemapJSON struct {
@@ -21,6 +22,7 @@ type TilemapJSON struct {
 	Width    int          `json:"mapWidth"`
 	Height   int          `json:"mapHeight"`
 	Layers   []*LayerJSON `json:"layers"`
+	Solid    [][]bool
 }
 
 func NewTilemap(filepath string) (*TilemapJSON, error) {
@@ -34,5 +36,27 @@ func NewTilemap(filepath string) (*TilemapJSON, error) {
 		return nil, err
 	}
 
+	tilemap.Solid = make([][]bool, tilemap.Height)
+	for y := 0; y < tilemap.Height; y++ {
+		tilemap.Solid[y] = make([]bool, tilemap.Width)
+	}
+
+	for _, layer := range tilemap.Layers {
+		if layer.Collider {
+			for _, tile := range layer.Tiles {
+				if tile.X >= 0 && tile.X < tilemap.Width && tile.Y >= 0 && tile.Y < tilemap.Height {
+					tilemap.Solid[tile.Y][tile.X] = true
+				}
+			}
+		}
+	}
+
 	return &tilemap, nil
+}
+
+func (t *TilemapJSON) IsTileSolid(tx, ty int) bool {
+	if tx < 0 || ty < 0 || tx >= t.Width || ty >= t.Height {
+		return true
+	}
+	return t.Solid[ty][tx]
 }
