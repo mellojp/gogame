@@ -27,9 +27,18 @@ const (
 
 	IDLE_ANIM_TPS = 6.0
 
-	ROLL_ANIM_TPS       = 2.0
-	ROLL_DISTANCE       = 420.0
-	ROLL_COOLDOWN_TICKS = 28
+	ATK_ANIM_TPS             = 2.30
+	ATK_LUNGE_DIST           = 15.0
+	ATK_LUNGE_TICKS          = 3
+	COMBO_INPUT_BUFFER_TICKS = 10
+	COMBO_QUEUE_OPEN_PERCENT = 80
+	ATK_CHAIN_MOMENTUM_KEEP  = 0.45
+	ATK_LUNGE_CARRY_GAIN     = 0.15
+	ATK_MOMENTUM_DECAY       = 0.83
+
+	ROLL_ANIM_TPS         = 3.0
+	ROLL_DISTANCE         = 420.0
+	ROLL_POST_DELAY_TICKS = 15
 
 	DEBUG_PLAYER_HITBOX = false
 )
@@ -40,7 +49,8 @@ type Game struct {
 	Tilemap    *TilemapJSON
 	TilemapImg *ebiten.Image
 
-	Cam *Camera
+	Cam                    *Camera
+	attackInputBufferTicks int
 }
 
 func (g *Game) Update() error {
@@ -73,10 +83,31 @@ func (g *Game) Update() error {
 		}
 		g.Player.TryStartRoll(rollDir)
 	}
-
+	if inpututil.IsKeyJustPressed(ebiten.KeyX) {
+		g.attackInputBufferTicks = COMBO_INPUT_BUFFER_TICKS
+	}
+	if g.attackInputBufferTicks > 0 {
+		attackDir := g.Player.CurrDirection
+		if inputX != 0 || inputY != 0 {
+			if dir, ok := VectorToDir[Vec{X: inputX, Y: inputY}]; ok {
+				attackDir = dir
+			}
+		}
+		if g.Player.TryStartAttack(attackDir) {
+			g.attackInputBufferTicks = 0
+		} else {
+			g.attackInputBufferTicks--
+		}
+	}
 	if g.Player.IsRolling() {
 		if rollDx, rollDy, ok := g.Player.ConsumeRollStep(); ok {
 			g.movePlayerByVelocityWithCollision(rollDx, rollDy)
+		}
+	} else if g.Player.IsActionLocked() {
+		if g.Player.IsAttacking() {
+			if atkDx, atkDy, ok := g.Player.ConsumeAttackStep(); ok {
+				g.movePlayerByVelocityWithCollision(atkDx, atkDy)
+			}
 		}
 	} else {
 		g.Player.SetDirection(inputX, inputY)
@@ -87,8 +118,10 @@ func (g *Game) Update() error {
 	animFinished := g.Player.CurrentAnimation().Update()
 
 	if g.Player.isAnimationLocked && animFinished {
-		// Transition on the same tick to avoid an extra end-turn display frame.
-		g.Player.FinishAction()
+		if !g.Player.AdvanceQueuedAction() {
+			// Transition on the same tick to avoid an extra end-turn display frame.
+			g.Player.FinishAction()
+		}
 	}
 
 	//camera settings
@@ -206,6 +239,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	atkImg, _, err := ebitenutil.NewImageFromFile("assets/player/Melee.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	atk2Img, _, err := ebitenutil.NewImageFromFile("assets/player/Melee2.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	atk3Img, _, err := ebitenutil.NewImageFromFile("assets/player/Melee3.png")
+	if err != nil {
+		log.Fatal(err)
+	}
 	rollImg, _, err := ebitenutil.NewImageFromFile("assets/player/Rolling.png")
 	if err != nil {
 		log.Fatal(err)
@@ -221,15 +266,21 @@ func main() {
 	}
 
 	playerSprisheets := map[PlayerMode]*Spritesheet{
-		Idle: NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, idleImg),
-		Run:  NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, runImg),
-		Roll: NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, rollImg),
+		Idle:    NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, idleImg),
+		Run:     NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, runImg),
+		Attack1: NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, atkImg),
+		Attack2: NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, atk2Img),
+		Attack3: NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, atk3Img),
+		Roll:    NewSpritesheet(VERTICAL_TILES, HORTIZONTAL_TILES, TILE_SIZE, rollImg),
 	}
 
 	playerAnimations := map[PlayerMode]map[PlayerDir]*Animation{
-		Idle: newDirectionalAnimations(IDLE_ANIM_TPS, true),
-		Run:  newDirectionalAnimations(RUN_ANIM_TPS, true),
-		Roll: newDirectionalAnimations(ROLL_ANIM_TPS, false),
+		Idle:    newDirectionalAnimations(IDLE_ANIM_TPS, true),
+		Run:     newDirectionalAnimations(RUN_ANIM_TPS, true),
+		Attack1: newDirectionalAnimations(ATK_ANIM_TPS, false),
+		Attack2: newDirectionalAnimations(ATK_ANIM_TPS, false),
+		Attack3: newDirectionalAnimations(ATK_ANIM_TPS, false),
+		Roll:    newDirectionalAnimations(ROLL_ANIM_TPS, false),
 	}
 
 	player := NewPlayer(

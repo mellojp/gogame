@@ -1,9 +1,10 @@
 package main
 
 type Animation struct {
-	FirstFrame   int
-	LastFrame    int
-	Step         int
+	FirstFrame int
+	LastFrame  int
+	Step       int
+	// SpeedInTps is the frame interval in ticks (can be fractional).
 	SpeedInTps   float32
 	FrameCounter float32
 	currFrame    int
@@ -27,19 +28,24 @@ func (a *Animation) Frame() int {
 }
 
 func (a *Animation) Update() bool {
-	a.FrameCounter -= 1.0
-	if a.FrameCounter < 0.0 {
-		a.FrameCounter = a.SpeedInTps
+	frameInterval := a.SpeedInTps
+	if frameInterval <= 0 {
+		frameInterval = 1
+	}
+
+	a.FrameCounter += 1.0
+	for a.FrameCounter >= frameInterval {
+		a.FrameCounter -= frameInterval
 		a.currFrame += a.Step
 
 		if a.currFrame > a.LastFrame {
 			if a.loops {
-				a.Reset()
-			} else {
-				a.currFrame = a.LastFrame
-				return true
+				a.currFrame = a.FirstFrame
+				continue
 			}
-
+			a.currFrame = a.LastFrame
+			a.FrameCounter = 0
+			return true
 		}
 	}
 	return false
@@ -47,6 +53,7 @@ func (a *Animation) Update() bool {
 
 func (a *Animation) Reset() {
 	a.currFrame = a.FirstFrame
+	a.FrameCounter = 0
 }
 
 func (a *Animation) SetLoop(condition bool) {
